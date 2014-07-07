@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<!-- By Illahi Khan -->
+  <head>
+    <title><%= title %></title>
+
+    <link rel='stylesheet' href='/stylesheets/style.css' />
+    <script src="/socket.io/socket.io.js"></script>
+	<script src="http://code.jquery.com/jquery-1.10.2.min.js"></script>
+	<script src="javascripts/jquery.timeago.js"></script>
+  </head>
+
+  <body>
+
+  	<!-- Socket interaction -->
+  	<!-- todo: move to own file -->
+	<script>
+		var socket = io.connect('http://localhost:3000');
+		var user_name = "anonymous";
+		var staging_reply_counter = 0;  // change to alphanumeric method
+		var thread_staging_reply_counter = 0; // change to alphanumeric method
+
+		// When connected to the server, tell server the username.
+		socket.on('connect', function () {
+			// TODO: verify username serverside and client side
+			user_name = prompt("What's your name?");
+			socket.emit('newUser', user_name);
+		});
+
+		// When client receives confirmation of successful connection, update view.
+		socket.on('connectionConfirmed', function (users, threads) {
+			// Tell client that it has connected.
+			$('#conversation').append('<p>You are now connected.</p>');
+			// Creaete user list.
+			$('#users').empty();
+			$.each(users, function(key, value) {
+				$('#users').append('<div id=user_' + key + '>' + key + '</div>');
+			});
+			// Create thread list.
+			for (var i = 0; i < threads.length; i++) {
+				$('#threads').append('<div id="' + threads[i]._id + '" class="thread">' + threads[i].title +
+				'&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbspDate : ' + threads[i].date + '&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbspUser : ' + threads[i].username + '</div>');
+			}
+		});
+
+		// When someone else connects or disconnects, update the view.
+		socket.on('connectionChange', function (username, date, type) {
+			var status;
+			if (type == 0) {
+				status = ' has disconnected.';
+				$('#user_' + username).remove();
+			}
+			else if (type == 1) {
+				status = ' has connected.';
+				$('#users').append('<div id=user_' + username + '>' + username + '</div>');
+			}
+			else {
+				status = ' - connection status unknown.';
+			}
+			$('#conversation').append('<p>' + username + status + '<p>');
+		});
+
+		// When someone else submits a new thread, update the view.
+		socket.on('appendThread', function (thread) {
+			$('#threads').prepend('<div id="' + thread._id + '" class="thread">' + thread.title + 
+			'&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbspDate : ' + thread.date + '&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbspUser : ' + thread.username + '</div>');
+		});
+
+		// DEPRECATED - When someone else submits a new message, update the view. 
+		socket.on('updateChat', function (username, data, date) {
+			$('#conversation').append('<p>Posted <abbr class="timeago" title="' + date + '">Time</abbr> by ' + username + ' :</p>');
+			$('#conversation').append('<p>&nbsp&nbsp&nbsp&nbsp' + data + '</p>');
+			jQuery("abbr.timeago").timeago();
+		});
+
+		// Request more information on a thread.
+		var requestThread = function requestThread (id) {
+			socket.emit('threadRequest', id);
+		}
+
+		// When the server responds to your request for more information about a thread.
+		socket.on('requestedThread', function (collection) {
+			//alert(JSON.stringify(collection));
+			var id = collection[0]._id;
+			id = "#" + id;
+			$(id).append("<br>&nbsp&nbsp&nbsp&nbsp<span>" + collection[0].message + "</span>");
+			$(id).append("<span class='reply-button' id='r" + collection[0]._id + "'>&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbspreply</span>");
+			for (var i = 1; i < collection.length; i++) {
+				parent = "#" + collection[i].parent;
+				$(parent).append('<div id="' + collection[i]._id + '" class="reply">' + 
+				'Date : ' + collection[i].date + ' User : ' + collection[i].username + 
+				'<br>' + collection[i].message + ' <span class="reply-button" id="r' + collection[i]._id + 
+				'">reply</span></div>');
+				/*$(parent).append("<br>&nbsp&nbsp&nbsp&nbsp<span>" + collection[i].message + "</span>");
+				$(parent).append("<span class='reply-button' id='" + collection[i]._id +
+				"'>&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbspreply</span></div>'");*/
+			}
+		});
+
+		// Create a new reply.
+		var reply = function reply (message, parent_id) {
+			// Stage the reply
+			var date = new Date(); 
+			id = "#" + parent_id;
+			$(id).append("<div class='reply' id='staging-reply-" + staging_reply_counter + "' style='color:gray;'>" + 'Date : ' + date + ' User : ' + user_name + 
+				'<br>' + message + ' <span id="staging-reply-button-' + staging_reply_counter + 
+				'">reply</span></div>');
+			socket.emit('newReply', message, parent_id, staging_reply_counter);
+			staging_reply_counter++;
+		};
+
+		// Receive notification of your newly created thread.
+		socket.on('threadStatus', function (id, status, staging_id) {
+			if (status == "success") {
+				// Change from staging to actual
+				// Change div box id
+				var box_id = "staging-thread-" + staging_id;
+				var element = document.getElementById(box_id);
+				element.id = id;
+				element.className = "thread";	
+			}
+			else if (status == "fail") {
+				// Append failure notice and deletion option.
+				var box_id = "#staging-reply-" + staging_id;
+				$(box_id).append(" Failed.");
+				$(box_id).css("color","red");
+			}
+			else {
+				alert("Unknown 'replyStatus' failure.");
+			}
+		});
+
+		// Receive notification of your newly created reply.
+		socket.on('replyStatus', function (id, status, staging_id) {
+			if (status == "success") {
+				// Change from staging to actual
+				// Change div box id
+				var box_id = "staging-reply-" + staging_id;
+				var element = document.getElementById(box_id);
+				element.id = id;
+				// Change span reply id and class
+				box_id = "staging-reply-button-" + staging_id;
+				element = document.getElementById(box_id);
+				element.id = "r" + id;
+				element.className = "reply-button";	
+				box_id = "#" + id;
+				$(box_id).css("color","black");
+			}
+			else if (status == "fail") {
+				// Append failure notice and deletion option.
+				var box_id = "#staging-reply-" + staging_id;
+				$(box_id).append(" Failed.");
+				$(box_id).css("color","red");
+			}
+			else {
+				alert("Unknown 'replyStatus' failure.");
+			}
+		});
+
+		socket.on('appendReply', function (reply) {
+			// Only append if that thread is already open
+			box_id = "#" + reply.parent;
+			$(box_id).append('<div class="reply" id="' + reply._id + '">' + 'Date : ' + reply.date + ' User : ' + reply.username + '<br>' + reply.message + ' <span class="reply-button" id="r' + reply._id + 
+				'">reply</span></div>');					
+		});
+
+		// When the page loads, do this...
+		$(function(){
+
+			// DEPRECATED - When client user presses send, emit message to server.
+			$('#datasend').click( function() {
+				var message = $('#data').val();
+				$('#data').val('');
+				socket.emit('newMessage', message);
+			});
+
+			// When client user presses submit for new thread.
+			$('#thread-datasend').click( function () {
+				var title = $('#title').val();
+				$('#title').val('');
+				var message = $('#message').val();
+				$('#message').val('');
+				// Create the staging thread.
+				var date = new Date(); 
+				$("#threads").prepend('<div id="staging-thread-' + thread_staging_reply_counter + '" class="staging-thread">'
+				+ title + '&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbspDate : ' 
+				+ date + '&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbsp&nbspUser : ' + user_name + '</div>');
+				// Send the new thread to the server.
+				socket.emit('newThread', title, message, thread_staging_reply_counter);
+				thread_staging_reply_counter++;
+			});
+
+			// DEPRECATED - When client user presses the enter key, 
+			// act as though send was pressed (defined above).
+			$('#data').keypress(function(e) {
+				if(e.which == 13) {
+					$(this).blur();
+					$('#datasend').focus().click();
+				}
+			});
+
+			// When a user clicks a thread, call the requestThread function.
+			$("#threads").on("click", ".thread", function(event) {
+				if (event.target == event.currentTarget) {
+					requestThread(event.target.id);
+				};
+			});
+
+			// When a user clicks on a reply button, call reply function.
+			$("#threads").on("click", ".reply-button", function(event) {
+				var message = prompt("Please enter a message.");
+				var id = event.target.id.slice(1);
+				reply(message, id);
+			});
+
+		});
+	</script>
+
+	<!-- <div style="float:left;width:100px;border-right:1px solid black;height:300px;padding:10px;overflow:scroll-y;">
+		<b>USERS</b>
+		<div id="users"></div>
+	</div>
+	<div style="float:left;width:300px;height:250px;overflow:scroll-y;padding:10px;">
+		<div id="conversation"></div>
+		<input id="data" style="width:200px;" />
+		<input type="button" id="datasend" value="send" />
+	</div>
+	<br> -->
+<!-- 	<div id="main"></div>
+	<div style="clear:both;"></div> -->
+	<div>
+		<input id="title" placeholder="Title" style="width:200px;" />
+		<input id="message" placeholder="Message" style="width:200px;" />
+		<input type="button" id="thread-datasend" value="send" />
+	</div>
+	<div id="threads"></div>
+  </body>
+</html>
