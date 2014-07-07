@@ -1,6 +1,7 @@
-Basic NodeJS Chat Server + Client 
+Dynamic Discussion Server
 ===========
-Just a very basic project I am working on to learn NodeJS (with the help of some very helpful tutorials online). Will update as I go along on this journey. Currently only basic chat functions work and timestamps.
+
+Hello! This is a server that handles messages sent from a Dynamic Discussion client. Messages that are sent from a client are stored in a tree-like structure, cached accordingly, and sent to every other client which has that 'thread' open. All-in-all this is a model of reddit-like nested comment discussion boards with the major difference in functionality being that new comments and threads are presented in your browser without the requirement of a browser refresh. MongoDB provides the database. Anything that can be cached to improve performance is cached. The most recent thread trees are loaded into memory from the database on the start of the server to improve performance and reduce database calls.
 
 Using:
 >nodejs
@@ -8,17 +9,10 @@ Using:
 >expressjs
 >ejs
 >less
+>mongodb
 
 Instructions:
-You must have node and the libraries stated above installed on your computer. Note: I only tested this on a linux machine.
+You must have node and the packages stated above installed on your computer.
 
 1. In terminal, when in the directory, enter: node app.js
 2. In browser go to: http://localhost:3000
-
-
-Tutorial Sources:
-http://socket.io/#how-to-use
-http://coenraets.org/blog/2012/10/creating-a-rest-api-using-node-js-express-and-mongodb/
-http://psitsmike.com/2011/10/node-js-and-socket-io-multiroom-chat-tutorial/
-http://timeago.yarp.com/
-
